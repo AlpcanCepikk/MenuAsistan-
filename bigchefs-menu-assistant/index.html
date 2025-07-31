@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="X-Frame-Options" content="DENY">
+  <meta http-equiv="X-XSS-Protection" content="1; mode=block">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:;">
+  <title>BigChefs Menü Asistan</title>
+  <script src="./pdfjs/build/pdf.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f0f0f0;
+    }
+
+    #pdf-container {
+      width: 100vw;
+      height: 100vh;
+      overflow-y: scroll;
+      position: relative;
+      z-index: 0;
+    }
+
+    canvas {
+      display: block;
+      margin: 20px auto;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Yeni Chat Bubble Tasarımı - Thinking Cloud Mantığı */
+    #chat-bubble {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      animation: slideIn 0.5s ease-out;
+      cursor: pointer;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* Avatar İkonu - Sağ altta - Büyütüldü */
+    .chat-avatar {
+      width: 65px;
+      height: 65px;
+      background: linear-gradient(135deg, #e30613 0%, #c70510 100%);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      flex-shrink: 0;
+      box-shadow: 0 6px 20px rgba(227, 6, 19, 0.5);
+      position: relative;
+      z-index: 2;
+      color: white;
+      order: 2;
+    }
+
+    /* Mesaj Baloncuğu - Sol üstte (thinking cloud) - Daha sola kaydırıldı */
+    .bubble-text {
+      background-color: #e30613;
+      color: white;
+      padding: 14px 20px;
+      border-radius: 25px;
+      font-weight: 500;
+      font-size: 16px;
+      line-height: 1.4;
+      box-shadow: 0 4px 12px rgba(227, 6, 19, 0.3);
+      transition: all 0.3s ease;
+      max-width: 300px;
+      position: relative;
+      z-index: 1;
+      order: 1;
+      margin-right: 45px;
+      margin-bottom: 15px;
+    }
+
+    /* Thinking cloud kuyrukları - Küçük daireler (konumları düzeltildi) */
+    .bubble-text::after {
+      content: '';
+      position: absolute;
+      bottom: -20px;
+      right: 35px;
+      width: 10px;
+      height: 10px;
+      background-color: #e30613;
+      border-radius: 50%;
+      box-shadow: 
+        15px 6px 0 -1px #e30613,
+        25px 12px 0 -4px #e30613;
+    }
+
+    #chat-bubble:hover .bubble-text {
+      transform: scale(1.02);
+      box-shadow: 0 6px 16px rgba(227, 6, 19, 0.4);
+    }
+
+    .text-content {
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .speech-icon {
+      font-size: 20px;
+    }
+
+    /* Sohbet Kutusu */
+    #chat-box {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 340px;
+      max-height: 550px;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 1001;
+      animation: chatBoxOpen 0.3s ease-out;
+    }
+
+    @keyframes chatBoxOpen {
+      from {
+        transform: scale(0.8) translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+      }
+    }
+
+    #chat-header {
+      background: linear-gradient(135deg, #e30613 0%, #c70510 100%);
+      color: white;
+      padding: 16px 20px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 18px;
+    }
+
+    #chat-close {
+      cursor: pointer;
+      font-size: 24px;
+      color: white;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+      line-height: 1;
+    }
+
+    #chat-close:hover {
+      opacity: 1;
+    }
+
+    #chat-messages {
+      flex: 1;
+      padding: 16px;
+      font-size: 14px;
+      overflow-y: auto;
+      height: 380px;
+      background: #E2DBD4;
+    }
+
+    #chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    #chat-messages::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    #chat-messages::-webkit-scrollbar-thumb {
+      background: #e30613;
+      border-radius: 3px;
+    }
+
+    #chat-input-area {
+      display: flex;
+      border-top: 1px solid #eee;
+      background: white;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    #chat-input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 1px solid #ddd;
+      border-radius: 24px;
+      outline: none;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    #chat-input:focus {
+      border-color: #e30613;
+    }
+
+    #send-button {
+      background: linear-gradient(135deg, #e30613 0%, #c70510 100%);
+      color: white;
+      border: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+      position: relative;
+      box-shadow: 0 2px 8px rgba(227, 6, 19, 0.3);
+      font-size: 20px;
+    }
+
+    #send-button:hover {
+      background: linear-gradient(135deg, #c70510 0%, #a50408 100%);
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(227, 6, 19, 0.4);
+    }
+
+    #send-button:active {
+      transform: scale(0.95);
+    }
+
+    /* Modern gönder ikonu */
+    .send-icon {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    /* Yeni mesaj stili - Bot sol, kullanıcı sağ */
+    .message-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 12px 4px;
+      animation: messageSlide 0.3s ease-out;
+    }
+
+    .message-container.user-message {
+      flex-direction: row-reverse;
+      justify-content: flex-start;
+    }
+
+    @keyframes messageSlide {
+      from {
+        transform: translateY(10px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .message-avatar {
+      width: 35px;
+      height: 35px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .bot-avatar {
+      background: linear-gradient(135deg, #e30613 0%, #c70510 100%);
+      color: white;
+    }
+
+    .user-avatar {
+      background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+      color: white;
+    }
+
+    .message-bubble {
+      position: relative;
+      padding: 12px 16px;
+      border-radius: 18px;
+      max-width: 220px;
+      word-wrap: break-word;
+      line-height: 1.4;
+      font-size: 14px;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      border: 1px solid #f0f0f0;
+    }
+
+    /* Bot mesajı kuyruk (sol) */
+    .message-bubble::before {
+      content: '';
+      position: absolute;
+      top: 15px;
+      left: -8px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 8px solid white;
+      filter: drop-shadow(-2px 0px 2px rgba(0, 0, 0, 0.1));
+    }
+
+    /* Kullanıcı mesajı kuyruk (sağ) */
+    .user-message .message-bubble::before {
+      left: auto;
+      right: -8px;
+      border-right: none;
+      border-left: 8px solid white;
+      filter: drop-shadow(2px 0px 2px rgba(0, 0, 0, 0.1));
+    }
+
+    .typing {
+      font-style: italic;
+      color: #999;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .typing::after {
+      content: '...';
+      animation: dots 1.5s infinite;
+    }
+
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+
+    /* İlk Hoşgeldin Mesajı */
+    .welcome-message {
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #eee;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .welcome-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #333;
+    }
+
+    .welcome-emoji {
+      font-size: 20px;
+    }
+
+    .welcome-list {
+      margin: 10px 0;
+      color: #555;
+    }
+
+    .welcome-list-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 8px 0;
+    }
+
+    .welcome-list-item .emoji {
+      font-size: 16px;
+      width: 20px;
+      flex-shrink: 0;
+    }
+
+    .welcome-example {
+      background: #f8f8f8;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-top: 4px;
+      font-size: 13px;
+      color: #666;
+    }
+
+    .error-message {
+      background: #ffebee;
+      color: #c62828;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ffcdd2;
+      margin: 8px 0;
+    }
+
+    .offline-notice {
+      background: #fff3e0;
+      color: #f57c00;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ffcc02;
+      margin: 8px 0;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div id="pdf-container"></div>
+
+  <!-- Yeni Chat Bubble Tasarımı -->
+  <div id="chat-bubble" onclick="toggleChat()">
+    <div class="chat-avatar">🤖</div>
+    <div class="bubble-text">
+      <div class="text-content">
+        <span class="speech-icon">💬</span>
+        <span>Merhaba! Ben menü asistanınız.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sohbet Kutusu -->
+  <div id="chat-box">
+    <div id="chat-header">
+      <span>BigChefs Asistan 🍽️</span>
+      <span id="chat-close" onclick="closeChat()">×</span>
+    </div>
+    <div id="chat-messages">
+      <div class="message-container">
+        <div class="message-avatar bot-avatar">🤖</div>
+        <div class="message-bubble">
+          <strong>👋 Merhaba!</strong><br>Ben BigChefs Asistanıyım.<br><br>
+          🍽️ Ne yemek istersiniz?<br>
+          🔍 Ürün adı yazabilir,<br>
+          🥗 Vegan / glutensiz gibi tercihler,<br>
+          ⚠️ Alerjen bilgisi belirtebilirsiniz.<br><br>
+          ⚡ Acelem var diyorsanız:<br>
+          <strong>"Hızlı bir şey öner"</strong> yazmanız yeterli.<br><br>
+          📂 Kategorilere göre de arayabilirsiniz<br>
+          (örneğin: <strong>salata</strong>, <strong>tatlı</strong>, <strong>içecek</strong>).
+        </div>
+      </div>
+    </div>
+    <div id="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Ne yemek istersiniz?" maxlength="500" />
+      <button id="send-button" onclick="sendMessage()">
+        <span style="display: flex; align-items: center; gap: 2px;">
+          👍<span style="transform: scaleX(-1);">👍</span>
+        </span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // Güvenlik konfigürasyonu
+    const SECURITY_CONFIG = {
+      maxMessageLength: 500,
+      maxMessages: 100,
+      rateLimitMs: 1000, // Minimum 1 saniye bekleme
+      allowedDomains: ['localhost', '127.0.0.1'], // Sadize yerel geliştirme için
+      timeout: 10000 // 10 saniye timeout
+    };
+
+    // Rate limiting
+    let lastMessageTime = 0;
+    let messageCount = 0;
+
+    // Güvenlik fonksiyonları
+    function sanitizeInput(input) {
+      if (typeof input !== 'string') return '';
+      return input
+        .trim()
+        .slice(0, SECURITY_CONFIG.maxMessageLength)
+        .replace(/[<>'"&]/g, function(match) {
+          const escapeMap = {
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#x27;',
+            '&': '&amp;'
+          };
+          return escapeMap[match];
+        });
+    }
+
+    function isValidUrl(url) {
+      try {
+        const urlObj = new URL(url);
+        return SECURITY_CONFIG.allowedDomains.some(domain => 
+          urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
+        );
+      } catch {
+        return false;
+      }
+    }
+
+    function checkRateLimit() {
+      const now = Date.now();
+      if (now - lastMessageTime < SECURITY_CONFIG.rateLimitMs) {
+        return false;
+      }
+      lastMessageTime = now;
+      return true;
+    }
+
+    // PDF yükleme (güvenli)
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = './pdfjs/build/pdf.worker.js';
+      const container = document.getElementById('pdf-container');
+      const url = 'GENEL_TR.pdf';
+
+      pdfjsLib.getDocument(url).promise.then(pdf => {
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          pdf.getPage(pageNum).then(page => {
+            const viewport = page.getViewport({ scale: 1.2 });
+            const canvas = document.createElement('canvas');
+            canvas.dataset.page = pageNum;
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            container.appendChild(canvas);
+            page.render({ canvasContext: context, viewport });
+          });
+        }
+      }).catch(error => {
+        console.warn('PDF yüklenemedi:', error);
+      });
+    }
+
+    const chatBox = document.getElementById("chat-box");
+    const chatMessages = document.getElementById("chat-messages");
+    const chatBubble = document.getElementById("chat-bubble");
+    let messages = [];
+    let currentTextIndex = 0;
+    let textRotationInterval;
+
+    // Metin döngüsü için
+    const bubbleTexts = [
+      { icon: "💬", text: "Merhaba! Ben menü asistanınız." },
+      { icon: "👋", text: "Size yardımcı olmamı ister misiniz?" },
+      { icon: "👉", text: "Tıklamanız yeterli!" }
+    ];
+
+    function showNextText() {
+      const textElement = chatBubble.querySelector('.text-content span:last-child');
+      const iconElement = chatBubble.querySelector('.speech-icon');
+      
+      if (textElement && iconElement) {
+        textElement.style.opacity = '0';
+        
+        setTimeout(() => {
+          iconElement.textContent = bubbleTexts[currentTextIndex].icon;
+          textElement.textContent = bubbleTexts[currentTextIndex].text;
+          textElement.style.opacity = '1';
+          currentTextIndex = (currentTextIndex + 1) % bubbleTexts.length;
+        }, 300);
+      }
+    }
+
+    function startTextRotation() {
+      textRotationInterval = setInterval(() => {
+        showNextText();
+      }, 3000);
+    }
+
+    function stopTextRotation() {
+      if (textRotationInterval) {
+        clearInterval(textRotationInterval);
+        textRotationInterval = null;
+      }
+    }
+
+    function toggleChat() {
+      chatBox.style.display = "flex";
+      chatBubble.style.display = "none";
+      stopTextRotation();
+      
+      setTimeout(() => {
+        const input = document.getElementById("chat-input");
+        if (input) input.focus();
+      }, 300);
+    }
+
+    function closeChat() {
+      chatBox.style.display = "none";
+      chatBubble.style.display = "flex";
+      
+      setTimeout(() => {
+        startTextRotation();
+      }, 100);
+    }
+
+    function sendMessage() {
+      const input = document.getElementById("chat-input");
+      if (!input) return;
+      
+      const rawMsg = input.value;
+      const msg = sanitizeInput(rawMsg);
+      
+      if (!msg) {
+        showError("Lütfen bir mesaj yazın.");
+        return;
+      }
+
+      // Rate limiting kontrolü
+      if (!checkRateLimit()) {
+        showError("Çok hızlı mesaj gönderiyorsunuz. Lütfen bekleyin.");
+        return;
+      }
+
+      // Mesaj sayısı kontrolü
+      if (messageCount >= SECURITY_CONFIG.maxMessages) {
+        showError("Maksimum mesaj sayısına ulaştınız. Sayfayı yenileyin.");
+        return;
+      }
+
+      messageCount++;
+      messages.push({ role: "user", text: msg });
+      renderAllMessages();
+
+      const typing = document.createElement("div");
+      typing.className = "typing";
+      typing.textContent = "Asistan yazıyor";
+      chatMessages.appendChild(typing);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      input.value = "";
+
+      // Backend çağrısı yerine offline mesaj göster
+      setTimeout(() => {
+        if (chatMessages.contains(typing)) {
+          chatMessages.removeChild(typing);
+        }
+        
+        messages.push({
+          role: "bot",
+          text: `🔧 <strong>Geliştirme Modu</strong><br><br>
+Şu anda AI asistan çevrimdışı.<br><br>
+📱 <strong>Gerçek uygulamada:</strong><br>
+• Menüdeki ürünleri arayabilir<br>
+• Fiyat ve içerik bilgisi alabilir<br>
+• Alerjen uyarıları görebilir<br>
+• Kişiselleştirilmiş öneriler alabilirsiniz<br><br>
+💡 <strong>Örnek sorular:</strong><br>
+"Glutensiz seçenekler neler?"<br>
+"100 TL altı ana yemekler"<br>
+"Vegan tatlılar var mı?"`,
+          isFormatted: true
+        });
+        renderAllMessages();
+      }, 1500);
+    }
+
+    function showError(message) {
+      const errorDiv = document.createElement("div");
+      errorDiv.className = "error-message";
+      errorDiv.textContent = message;
+      chatMessages.appendChild(errorDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      
+      setTimeout(() => {
+        if (chatMessages.contains(errorDiv)) {
+          chatMessages.removeChild(errorDiv);
+        }
+      }, 3000);
+    }
+
+    function formatAIResponse(response) {
+      if (response.includes('🍽️') || response.includes('💰') || response.includes('🏷️')) {
+        return response;
+      }
+      return response;
+    }
+
+    function renderAllMessages() {
+      chatMessages.innerHTML = "";
+      
+      const welcomeText = `<strong>👋 Merhaba!</strong><br>Ben BigChefs Asistanıyım.<br><br>
+🍽️ Ne yemek istersiniz?<br>
+🔍 Ürün adı yazabilir,<br>
+🥗 Vegan / glutensiz gibi tercihler,<br>
+⚠️ Alerjen bilgisi belirtebilirsiniz.<br><br>
+⚡ Acelem var diyorsanız:<br>
+<strong>"Hızlı bir şey öner"</strong> yazmanız yeterli.<br><br>
+📂 Kategorilere göre de arayabilirsiniz<br>
+(örneğin: <strong>salata</strong>, <strong>tatlı</strong>, <strong>içecek</strong>).`;
+
+      const container = document.createElement("div");
+      container.className = "message-container";
+      
+      const avatar = document.createElement("div");
+      avatar.className = "message-avatar bot-avatar";
+      avatar.textContent = "🤖";
+      
+      const bubble = document.createElement("div");
+      bubble.className = "message-bubble";
+      bubble.innerHTML = welcomeText;
+      
+      container.appendChild(avatar);
+      container.appendChild(bubble);
+      chatMessages.appendChild(container);
+
+      messages.forEach(msg => {
+        const container = document.createElement("div");
+        container.className = "message-container";
+        
+        if (msg.role === "user") {
+          container.classList.add("user-message");
+        }
+        
+        const avatar = document.createElement("div");
+        avatar.className = "message-avatar";
+        
+        if (msg.role === "user") {
+          avatar.classList.add("user-avatar");
+          avatar.textContent = "👤";
+        } else {
+          avatar.classList.add("bot-avatar");
+          avatar.textContent = "🤖";
+        }
+        
+        const bubble = document.createElement("div");
+        bubble.className = "message-bubble";
+        
+        if (msg.isFormatted) {
+          bubble.innerHTML = msg.text.replace(/\n/g, '<br>');
+        } else {
+          bubble.textContent = msg.text;
+        }
+        
+        container.appendChild(avatar);
+        container.appendChild(bubble);
+        chatMessages.appendChild(container);
+      });
+      
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Event listeners
+    document.addEventListener("DOMContentLoaded", () => {
+      const chatInput = document.getElementById("chat-input");
+      if (chatInput) {
+        chatInput.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            sendMessage();
+          }
+        });
+
+        // Input sanitization
+        chatInput.addEventListener("input", (e) => {
+          const sanitized = sanitizeInput(e.target.value);
+          if (e.target.value !== sanitized) {
+            e.target.value = sanitized;
+          }
+        });
+      }
+    });
+
+    // Sayfa yüklendiğinde chat bubble'ı göster
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const bubble = document.getElementById("chat-bubble");
+        if (bubble) {
+          bubble.style.display = "flex";
+          startTextRotation();
+        }
+      }, 1000);
+    });
+
+    // Hata yakalama
+    window.addEventListener('error', (e) => {
+      console.error('Bir hata oluştu:', e.error);
+    });
+
+    // Unhandled promise rejection yakalama
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('Promise hatası:', e.reason);
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>
